@@ -1,0 +1,79 @@
+---
+title: "1. Sampling"
+output:
+  html_notebook:
+    toc: yes
+    number_sections: yes
+    toc_depth: '3'
+    toc_float:
+      collapsed: no
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+packages <- c("tidyverse", "readxl")
+ 
+for (package in packages) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package,
+                     dependencies = TRUE,
+                     repos='http://cran.us.r-project.org')
+  }
+}
+
+for (package in packages){
+  library(package, character.only = TRUE)
+}
+```
+
+
+# Manual labeling
+
+Loading the correct data (with RT's removed, url domain added to text)
+```{r}
+covid <- readRDS("D:/Data/covid_nort_domain.RDS")
+```
+
+I want to use stratified sampling when extracting the data, to ensure that all months are represented within the labeled sample. This is because the nature of the misinformation (e.g. topic) spread on twitter, is sure to have varied throughout the pandemic, and I want to make sure this variation is present within the labeled data. 
+
+First I'll reformat the date column, to be able to stratify using the months. 
+```{r}
+covid$date <- as.POSIXct(covid$created_at, format = "%Y-%m-%dT%H:%M:%S")
+covid$date <- format(as.Date(covid$date), "%Y-%m")
+```
+
+Removing some unnecessary columns as well
+```{r}
+covid <- covid |>
+  select(c(id, text, conversation_id, date))
+```
+
+Creating a new df with only the first instance of every unique conversation ID, to make sure that I don't end up with a tweet in the middle of a conversation with no context, in the extracted data set. 
+```{r}
+covid <- covid[with(covid, order(date)), ]
+
+first_tweet <- covid[match(unique(covid$conversation_id), covid$conversation_id), ]
+```
+
+
+Doing the random sampling, stratified by the month published:
+```{r}
+set.seed(1234)
+covid_sample <- first_tweet |>
+  group_by(date) |>
+  sample_n(30)
+```
+
+Removing any usernames mentioned in the texts before saving the sample
+```{r}
+covid_sample$text <- covid_sample$text |>
+  str_replace_all("@[a-z,A-Z]*[0-9]*[a-z,A-Z]*", "USERNAME") 
+```
+
+
+```{r}
+readr::write_csv2(covid_sample, "D:/Data/Training samples/sample_misinfo_classification.csv")
+```
+
