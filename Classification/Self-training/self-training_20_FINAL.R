@@ -130,8 +130,8 @@ lr_preds_all <- covid_df |>
 
 lr_preds_all_filtered_label <- lr_preds_all_filtered_label |>
   mutate(label = case_when(
-    .pred_misinfo > 0.95 ~ "misinfo",
-    .pred_non.misinfo > 0.05 ~ "non.misinfo"
+    .pred_misinfo > 0.99 ~ "misinfo",
+    .pred_non.misinfo > 0.01 ~ "non.misinfo"
   ))
 
 # lr_preds_all_filtered_label <- lr_preds_all_filtered_label |>
@@ -145,6 +145,9 @@ lr_preds_all_filtered_label |>
 lr_preds_all_filtered_label |>
   count(label) # misinfo = 46602, nonmisinfo = 611654
 
+# With 0.99 thresh:
+lr_preds_all_filtered_label |>
+  count(label) # misinfo = 27024, nonmisinfo = 631232
 
 # covid_predicted <- full_join(lr_preds_all_filtered_label, covid, by = "id") |>
 #   mutate(label = coalesce(label.x, label.y),
@@ -154,7 +157,7 @@ lr_preds_all_filtered_label |>
 # covid_predicted |>
 #   count(label)
 
-saveRDS(lr_preds_all_filtered_label, "D:/Data/misinformation_class_FINISHED_95.RDS")
+saveRDS(lr_preds_all_filtered_label, "D:/Data/misinformation_class_FINISHED_99.RDS")
 
 # Also extract random 1000 tweets to manually label, to look at the interrater agreement
 
