@@ -29,9 +29,9 @@ for (i in 1:481) {
   
   
   params = list(
-    `query` = paste0("lang:en place_country:NO conversation_id:", conversation_ids[i]),
+    `query` = paste0("lang:no place_country:NO conversation_id:", conversation_ids[i]),
     `max_results` = '100',
-    `start_time` = '2014-01-01T00:00:00Z',
+    `start_time` = '2020-01-01T00:00:00Z',
     `end_time` = '2022-12-31T23:59:00.000Z',
     `media.fields` = 'media_key,type,url,preview_image_url,public_metrics',
     `tweet.fields` = 'author_id,conversation_id,created_at,entities,geo,id,in_reply_to_user_id,lang,possibly_sensitive,public_metrics,referenced_tweets,reply_settings,source,text',
@@ -55,9 +55,9 @@ for (i in 1:481) {
     if (!is.null(next_token)) {
       Sys.sleep(1)
       params = list(
-        `query` = paste0("lang:en place_country:NO conversation_id:", conversation_ids[i]),
+        `query` = paste0("lang:no place_country:NO conversation_id:", conversation_ids[i]),
         `max_results` = '100',
-        `start_time` = '2014-01-01T00:00:00Z',
+        `start_time` = '2020-01-01T00:00:00Z',
         `end_time` = '2022-12-31T23:59:00.000Z',
         `media.fields` = 'media_key,type,url,preview_image_url,public_metrics',
         `tweet.fields` = 'author_id,conversation_id,created_at,entities,geo,id,in_reply_to_user_id,lang,possibly_sensitive,public_metrics,referenced_tweets,reply_settings,source,text',
@@ -94,8 +94,8 @@ for (i in 1:481) {
 } 
 
 # Save the files in batches
-write_rds(conversations_all, "D:/Data/conversations_vaccines_no_media_eng.rds")
-write_rds(media, "D:/Data/conversations_vaccines_media_eng.rds")
+write_rds(conversations_all, "D:/Data/conversations_vaccines_no_media_no.rds")
+write_rds(media, "D:/Data/conversations_vaccines_media_no.rds")
 
 
 
