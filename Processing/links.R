@@ -41,7 +41,7 @@ pattern <- c("bit.ly", "dlvr.it", "ift.tt", "ow.ly", "t.co", "buff.ly", "goo.gl"
              "bddy.me", "zxc.li", "reut.rs", "tmblr.co", "cutt.ly", "rfr.bz", 
              "mol.im", "osf.io", "who.int", "tiny.cc", "cnn.it", "f24.my", 
              "spoti.fi", "pca.st", "t.me", "dailyclout.io", "hubs.la", "bitchute.xyz",
-             "g.co", "gj.sn", "m.faz.net")
+             "g.co", "m.faz.net")
 
 new_dataframe <- covid_ext |>
   filter(rowSums(sapply(pattern, function(x) grepl(paste0("^",x), display_url))) > 0) |>
@@ -56,17 +56,21 @@ out_df <- data.frame()
 for (i in 1:length(expanded_urls)) {
   valid_url <- TRUE
   while(valid_url){
-    x <- HEAD(expanded_urls[i])
-    if (x$status_code == 200) {
-      out_df <- bind_rows(out_df, data.frame(url = x$url))
-      valid_url <- FALSE
-    } else {
+    tryCatch({
+      x <- HEAD(expanded_urls[i], timeout(10))  # Set timeout to 10 seconds
+      if (x$status_code == 200) {
+        out_df <- bind_rows(out_df, data.frame(url = x$url))
+        valid_url <- FALSE
+      } else {
+        out_df <- bind_rows(out_df, data.frame(url = "invalid url"))
+        valid_url <- FALSE
+      }
+    }, error = function(e) {
       out_df <- bind_rows(out_df, data.frame(url = "invalid url"))
       valid_url <- FALSE
-    }
+    })
   }
 }
-
 
 out_df <- data.frame()
 out <- covid_short |>
