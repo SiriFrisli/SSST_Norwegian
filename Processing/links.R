@@ -2,7 +2,7 @@ library(tidyverse)
 library(httr)
 library(urltools)
 
-covid <- readRDS("E:/Data/Datasets/covid_processed_class99_rt.RDS")
+covid <- readRDS("D:/Data/Datasets/covid_processed_class99_rt.RDS")
 
 # Want to extract the external links and add two new column to the df:
 # 1. Column containing the full link
@@ -79,4 +79,44 @@ saveRDS(combined, "E:/Data/Datasets/short_urls.RDS")
 # Unnesting the list column first
 covid_unnested <- covid |>
   unnest(urls, keep_empty = TRUE) |>
-  select(-c(start, end, images, status, display_url, title, description, unwound_url, media_key))
+  select(-c(start, end, images, status, display_url, title, description, unwound_url, media_key, url))
+
+covid_unnested_wide <- covid_unnested |>
+  group_by(id, tweet) |>
+  mutate(url_num = paste0("url_", row_number())) |>
+  pivot_wider(names_from = url_num, values_from = expanded_url)
+
+covid_unnested_wide <- covid_unnested_wide |>
+  ungroup()
+
+# Need to rename a column first
+names(combined)[length(names(combined))]<-"url_1" 
+combined_short <- combined |>
+  select(-c(url, display_url, expanded_url))
+combined_short <- combined_short |>
+  rename("expanded_url" = "url_1")
+
+combined_short_wide <- combined_short |>
+  group_by(id, tweet) |>
+  mutate(url_num = paste0("url_", row_number())) |>
+  pivot_wider(names_from = url_num, values_from = expanded_url)
+
+# covid_merged <- full_join(combined_short_wide, covid_unnested_wide, by = "id", suffix = c("_A", "_B")) |>
+#   mutate(across(ends_with("_A"), ~ coalesce(.x, get(sub("_A", "_B", cur_column()))))) |>
+#   select(-ends_with("_B")) |>
+#   rename_with(~ sub("_A", "", .x))
+
+# covid_fin <- right_join(combined_short_wide, covid_unnested_wide, by = c("id")) |>
+#   mutate(url_1 = coalesce(url_1.x, url_1.y),
+#          url_2 = coalesce(url_2.x, url_2.y),
+#          url_3 = coalesce(url_3.x, url_3.y),
+#          url_4 = coalesce(url_4.x, url_4.y),
+#          tweet = coalesce(tweet.y, tweet.x)) |>
+#   select(-ends_with(".x")) |>
+#   select(-c(url_1.x, url_2.x, url_3.x, url_4.x))
+#   rename_with(~ sub(".x", "", .x))
+
+cvoid_merged <- full_join(combined_short_wide, covid_unnested_wide, by = "id", suffix = c("_A", "_B")) |>
+  mutate(across(ends_with("_A"), ~ coalesce(.x, get(sub("_A", "_B", cur_column()))))) |>
+  select(-ends_with("_B")) |>
+  rename_with(~ sub("_A", "", .x))
