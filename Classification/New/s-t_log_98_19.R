@@ -146,3 +146,4 @@ covid_predicted |> # 98
   count(label) # misinfo = 21001, nonmisinfo = 259288
 
 saveRDS(covid_predicted, "E:/Data/Training samples/st_log_reg_98_filtered/misinformation_class_19_98.RDS")
+saveRDS(lr_preds_all, "E:/Data/Training samples/st_log_reg_98_filtered/misinformation_class_AL_98.RDS")
