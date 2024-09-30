@@ -47,7 +47,7 @@ covid_all_retweets <- covid_all |>
   filter(unnest_referenced_tweets_type == "retweeted")
 
 # Merge the dataframes based on the new text_match column
-covid_merged <- covid_all_retweets %>%
+covid_merged <- covid_all_retweets |>
   left_join(covid, by = c("unnest_referenced_tweets_id" = "id")) |>
     mutate(tweet = coalesce(tweet.x, tweet.y),
            conversation_id = coalesce(conversation_id.x, conversation_id.y),

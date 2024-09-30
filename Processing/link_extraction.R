@@ -58,6 +58,10 @@ covid_ext_dom <- sapply(covid_ext$expanded_url, function (i) {
 covid_ext_dom <- data.frame(dom_url=covid_ext_dom,
                             id=covid_ext$id)
 
+covid_ext_dom <- covid_ext_dom |>
+  count(dom_url)
+
+
 covid_ext_dom$dom_url <- str_remove_all(covid_ext_dom$dom_url, "www.")
 
 

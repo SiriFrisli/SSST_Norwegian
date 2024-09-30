@@ -47,28 +47,3 @@ kappa_result_2
 
 kappa_result_3 <- kappam.light(covid[,1:3])
 kappa_result_3
-
-################################################################################
-# Kappa agreement between finished classified df and manual check
-
-covid_man <- read_xlsx("D:/Data/Training samples/misinformation_labeled_sample.xlsx")
-covid_clas <- readRDS("D:/Data/misinformation_class_FINISHED_95.RDS")
-
-covid_man <- covid_man |>
-  rename(label_man = label)
-
-covid_clas <- covid_clas |>
-  semi_join(covid_man, by = "id")
-
-covid_clas <- covid_clas |>
-  select(tweet, id, created_at, label_clas = label)
-covid_clas <- covid_clas[order(covid_clas$created_at, decreasing = TRUE),]
-
-covid <- covid_man |>
-  merge(covid_clas, by = "id") |>
-  select(label_clas, label_man)
-
-kappa_result_2 <- kappa2(covid, weight = "unweighted")
-kappa_result_2
-
-#
