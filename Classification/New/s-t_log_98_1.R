@@ -1,6 +1,6 @@
 ## Self-training
 
-# Iteration: 2
+# Iteration: 1
 # Algorithm: Logistic regression
 # Word embeddings dimensions: 100
 # Class weights
@@ -8,13 +8,13 @@
 packages <- c("tidyverse", "tidymodels", "readxl", "ROSE", "recipes", "textrecipes",
               "e1071", "caret", "glmnet", "spacyr", "textdata", "xgboost", "data.table")
 
-# for (package in packages) {
-#   if (!require(package, character.only = TRUE)) {
-#     install.packages(package,
-#                      dependencies = TRUE,
-#                      repos='http://cran.us.r-project.org')
-#   }
-# }
+for (package in packages) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package,
+                     dependencies = TRUE,
+                     repos='http://cran.us.r-project.org')
+  }
+}
 
 for (package in packages){
   library(package, character.only = TRUE)
@@ -30,15 +30,20 @@ no_we <- no_we |>
   as_tibble()
 
 ################################################################################
-covid <- readRDS("~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_1_99.RDS")
+covid <- readRDS("~/INORK/Data/misinformation_manual_labeled_filtered.RDS")
 
 stopwords <- read_xlsx("~/INORK/stopwords.xlsx")
 custom_words <- stopwords |>
   pull(word)
 
 covid <- covid |>
+  filter(round == 1) |>
   select(tweet, label, id)
 
+covid$label <- case_when(
+  covid$label == 0 ~ "non.misinfo",
+  covid$label == 1 ~ "misinfo"
+)
 covid$label <- as.factor(covid$label)
 
 set.seed(1234)
@@ -47,21 +52,24 @@ train <- training(covid_split)
 test <- testing(covid_split)
 
 train |>
-  ungroup() |>
-  count(label) # misinfo = 114, non misinfo = 2066
+  count(label) # misinfo = 116, non misinfo = 736
+# round 1: 62 misinfo, 733 non
 
 ################################################################################
-2180/(table(train$label)[1] * 2) # 9.561404     
-2180/(table(train$label)[2] * 2) # 0.5275895    
+# 852/(table(train$label)[1] * 2) # 3.672414
+# 852/(table(train$label)[2] * 2) # 0.5788043
+
+795/(table(train$label)[1] * 2) # 6.41129
+795/(table(train$label)[2] * 2) # 0.542292
 
 train <- train |>
-  mutate(case_wts = ifelse(label == "misinfo", 9.561404, 0.5275895),
+  mutate(case_wts = ifelse(label == "misinfo", 6.41129, 0.542292),
          case_wts = importance_weights(case_wts))
 
 ################################################################################
 ## Logistic regression
 set.seed(8008)
-folds <- vfold_cv(train, strata = label, v = 5, repeats = 1)
+folds <- vfold_cv(train, strata = label, v = 5, repeats = 2)
 cls_metric <- metric_set(yardstick::precision, yardstick::recall, yardstick::f_meas)
 
 model_recipe <- recipe(label~tweet+case_wts, data = train) |>
@@ -102,15 +110,21 @@ lr_preds <- test |>
   bind_cols(predict(lr_final_fit, test))
 
 cm_lr <- confusionMatrix(table(test$label, lr_preds$.pred_class)) 
-cm_lr$byClass["F1"] # 0.4033613       
-cm_lr$byClass["Precision"] # 0.75     
-cm_lr$byClass["Recall"] # 0.2758621    
+# with only round 1
+cm_lr$byClass["F1"] # 0.2295082       
+cm_lr$byClass["Precision"] # 0.5833333     
+cm_lr$byClass["Recall"] # 0.1428571    
+
+# With round 2
+# cm_lr$byClass["F1"] # 0.5277778      
+# cm_lr$byClass["Precision"] # 0.6333333    
+# cm_lr$byClass["Recall"] # 0.452381   
 
 lr_preds |>
   conf_mat(truth = label, estimate = .pred_class) |> 
   autoplot(type = "heatmap") 
 
-# saveRDS(lr_final_fit, "~/INORK/NEW/Self_train/Log_reg/Classifier/round_1_98.RDS") # forgot number
+# saveRDS(lr_final_fit, "~/INORK/Self_train/Log_reg/Classifier/round_1_95.RDS")
 ################################################################################
 covid_df <- readRDS("~/INORK/Data/covid_relevant_url_nort.RDS")
 
@@ -134,22 +148,40 @@ lr_preds_all_filtered_label <- lr_preds_all_filtered |>
 lr_preds_all_filtered_label <- lr_preds_all_filtered_label |>
   select(tweet, label, id)
 
-lr_preds_all_filtered_label |> # 98
+lr_preds_all_filtered_label |> # round 1, 99
   ungroup() |>
-  count(label) # misinfo = 11, nonmisinfo = 5017
+  count(label) # misinfo = 124, nonmisinfo = 1607
 
-lr_preds_all_filtered_label |> # 99
-  ungroup() |>
-  count(label) # misinfo = 2308, nonmisinfo = 51821
+# lr_preds_all_filtered_label |> # round 1, 98
+#   ungroup() |>
+#   count(label) # misinfo = 383, nonmisinfo = 4000
 
-covid_predicted <- full_join(lr_preds_all_filtered_label, covid, by = "id") |>
+# lr_preds_all_filtered_label |> # round 2, 99
+#   ungroup() |>
+#   count(label) # misinfo = 605, nonmisinfo = 4925
+
+# covid_predicted <- full_join(lr_preds_all_filtered_label, covid, by = "id") |>
+#   mutate(label = coalesce(label.x, label.y),
+#          tweet = coalesce(tweet.x, tweet.y)) |>
+#   select(tweet, label, id)
+# 
+# covid_predicted |> # 98, round 1
+#   ungroup() |>
+#   count(label) # misinfo = 457, nonmisinfo = 4920
+
+write_csv2(lr_preds_all_filtered_label, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_1_99.csv")
+
+covid_checked <- read_xlsx("~/INORK/NEW/Self_train/Log_reg/Results/99_log_reg_misinfo_check.xlsx")
+
+covid_predicted <- full_join(covid_checked, covid, by = "id") |>
   mutate(label = coalesce(label.x, label.y),
          tweet = coalesce(tweet.x, tweet.y)) |>
   select(tweet, label, id)
 
-covid_predicted |> # 99
-  ungroup() |>
-  count(label) # misinfo = 2454, nonmisinfo = 54400
+covid_predicted |> #99, round 1, after check 
+  count(label) # misinfo = 146, non-misinfo = 2579
 
-saveRDS(covid_predicted, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_2_99.RDS")
-# saveRDS(lr_preds_all, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_preds_2_99.RDS")
+covid_checked |>
+  count(label) # misinfo = 72, non-misinfo = 1659
+
+saveRDS(covid_predicted, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_1_99.RDS")
