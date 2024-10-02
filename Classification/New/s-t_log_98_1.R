@@ -20,19 +20,18 @@ for (package in packages){
   library(package, character.only = TRUE)
 }
 
-Sys.setenv(SPACY_PYTHON = "/fp/homes01/u01/ec-sirif/.virtualenvs/r-reticulate")
-reticulate::use_virtualenv(Sys.getenv("SPACY_PYTHON", unset = "r-spacyr"))
+
 spacy_initialize(model = "nb_core_news_lg") # Spacy environment for lemmas
-no_we <- fread("~/INORK/model_1.txt", 
+no_we <- fread("~/INORK_ST/model_1.txt", 
                skip = 1, header = FALSE, sep = " ", quote = "", encoding = "UTF-8")
 
 no_we <- no_we |>
   as_tibble()
 
 ################################################################################
-covid <- readRDS("~/INORK/Data/misinformation_manual_labeled_filtered.RDS")
+covid <- readRDS("E:/Data/Training samples/misinformation_manual_labeled_filtered.RDS")
 
-stopwords <- read_xlsx("~/INORK/stopwords.xlsx")
+stopwords <- read_xlsx("~/INORK_ST/stopwords.xlsx")
 custom_words <- stopwords |>
   pull(word)
 
@@ -52,7 +51,7 @@ train <- training(covid_split)
 test <- testing(covid_split)
 
 train |>
-  count(label) # misinfo = 116, non misinfo = 736
+  count(label) # round 2: misinfo = 116, non misinfo = 736
 # round 1: 62 misinfo, 733 non
 
 ################################################################################
@@ -126,7 +125,7 @@ lr_preds |>
 
 # saveRDS(lr_final_fit, "~/INORK/Self_train/Log_reg/Classifier/round_1_95.RDS")
 ################################################################################
-covid_df <- readRDS("~/INORK/Data/covid_relevant_url_nort.RDS")
+covid_df <- readRDS("E:/Data/Datasets/Classification_data_filtered/covid_relevant_url_nort.RDS")
 
 match <- subset(covid, (covid$id %in% covid_df$id))
 covid_df <- covid_df |>
@@ -137,24 +136,24 @@ lr_preds_all <- covid_df |>
   bind_cols(predict(lr_final_fit, covid_df, type = "prob"))
 
 lr_preds_all_filtered <- lr_preds_all |>
-  filter(.pred_misinfo...25  > 0.99 | .pred_non.misinfo...26 > 0.99)
+  filter(.pred_misinfo...25  > 0.98 | .pred_non.misinfo...26 > 0.98)
 
 lr_preds_all_filtered_label <- lr_preds_all_filtered |>
   mutate(label = case_when(
-    .pred_misinfo...25 > 0.99 ~ "misinfo",
-    .pred_non.misinfo...26 > 0.99 ~ "non.misinfo"
+    .pred_misinfo...25 > 0.98 ~ "misinfo",
+    .pred_non.misinfo...26 > 0.98 ~ "non.misinfo"
   ))
 
 lr_preds_all_filtered_label <- lr_preds_all_filtered_label |>
   select(tweet, label, id)
 
-lr_preds_all_filtered_label |> # round 1, 99
-  ungroup() |>
-  count(label) # misinfo = 124, nonmisinfo = 1607
-
-# lr_preds_all_filtered_label |> # round 1, 98
+# lr_preds_all_filtered_label |> # round 1, 99
 #   ungroup() |>
-#   count(label) # misinfo = 383, nonmisinfo = 4000
+#   count(label) # misinfo = 124, nonmisinfo = 1607
+
+lr_preds_all_filtered_label |> # round 1, 98
+  ungroup() |>
+  count(label) # misinfo = 383, nonmisinfo = 4902
 
 # lr_preds_all_filtered_label |> # round 2, 99
 #   ungroup() |>
@@ -169,9 +168,12 @@ lr_preds_all_filtered_label |> # round 1, 99
 #   ungroup() |>
 #   count(label) # misinfo = 457, nonmisinfo = 4920
 
-write_csv2(lr_preds_all_filtered_label, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_1_99.csv")
+write_csv2(lr_preds_all_filtered_label, "E:/Data/Training samples/misinformation_class_1_98_nort.csv")
 
-covid_checked <- read_xlsx("~/INORK/NEW/Self_train/Log_reg/Results/99_log_reg_misinfo_check.xlsx")
+covid_checked <- read_xlsx("E:/Data/Training samples/misinformation_class_1_98_nort.xlsx")
+
+covid_checked <- covid_checked |>
+  rename(tweet = "tweet\r\n")
 
 covid_predicted <- full_join(covid_checked, covid, by = "id") |>
   mutate(label = coalesce(label.x, label.y),
@@ -179,9 +181,9 @@ covid_predicted <- full_join(covid_checked, covid, by = "id") |>
   select(tweet, label, id)
 
 covid_predicted |> #99, round 1, after check 
-  count(label) # misinfo = 146, non-misinfo = 2579
+  count(label) # misinfo = 285, non-misinfo = 1092
 
 covid_checked |>
-  count(label) # misinfo = 72, non-misinfo = 1659
+  count(label) # misinfo = 211, nonmisinfo = 172
 
-saveRDS(covid_predicted, "~/INORK/NEW/Self_train/Log_reg/Results/misinformation_class_1_99.RDS")
+saveRDS(covid_predicted, "E:/Data/Training samples/st_log_reg_98_filtered_nort/misinformation_class_1_98_nort.RDS")
