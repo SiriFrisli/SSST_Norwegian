@@ -75,3 +75,106 @@ covid_merged_full <- covid_merged |>
   arrange(created_at)
 
 saveRDS(covid_merged_full, "D:/Data/Datasets/covid_processed_class99_rt.RDS")
+
+################################################################################
+
+# NEW
+## Comparing the classified datasets, choosing one, and merging with the retweets data
+# without retweets
+nort_98 <- readRDS("D:/Data/Training samples/st_log_reg_98_filtered_nort/misinformation_class_19_98_nort.RDS")
+nort_98_not_labeled <- readRDS("D:/Data/Training samples/st_log_reg_98_filtered_nort/misinformation_class_ALL_98.RDS")
+
+nort_98_not_labeled <- nort_98_not_labeled |>
+  select(-c(label, .pred_misinfo...14, .pred_non.misinfo...15, .pred_misinfo...25, .pred_non.misinfo...26)) |>
+  anti_join(nort_98, by = "id")
+
+# with retweets
+rt_98 <- readRDS("D:/Data/Training samples/st_log_reg_98_filtered/misinformation_class_19_98.RDS")
+rt_98 <- rt_98 |>
+  select(-c(pred_misinfo, pred_non_misinfo))
+
+# Creating a dataset with id matches, to compare if the label is the same
+matches <- rt_98 |>
+  inner_join(nort_98, by = "id")
+
+mismatched_labels <- matches |>
+  filter(label.x != label.y)
+# 1129 out of 176033
+
+mismatched_labels |>
+  count(label.x)
+# misinfo = 1051, non.misinfo = 78
+
+mismatched_labels |>
+  count(label.y)
+# misinfo = 78, non.misinfo = 1051
+# it seems nort_98 is more accurate, with fewer misinfo labels. 
+
+################################################################################
+# combines the nort_98 with the nort_98_not_labeled
+# first create a labeled=="non.misinfo" column in nort_98_not_labeled
+nort_98_not_labeled$label <- "non.misinfo"
+
+# then combine the two dfs
+nort_98_combined <- nort_98_extra |>
+  rbind(nort_98_not_labeled)
+
+################################################################################
+# Adds the retweets back into nort_98_combined
+covid <- readRDS("D:/Data/Datasets/Classification_data_filtered/covid_relevant_url.RDS")
+
+covid <- covid |>
+  select(-c(label, .pred_misinfo, .pred_non.misinfo))
+
+nort_98_extra <- nort_98 |>
+  inner_join(covid, by = "id") |>
+  mutate(tweet = coalesce(tweet.x, tweet.y)) |>
+  select(-c(tweet.x, tweet.y))
+
+# Need to match the dfs based on the Id_variable in the list referenced_tweets
+covid_retweets <- covid |>
+  mutate(unnest_referenced_tweets = referenced_tweets) |>
+  unnest(unnest_referenced_tweets, names_sep = "_") |>
+  filter(unnest_referenced_tweets_type == "retweeted") |>
+  select(-unnest_referenced_tweets_type)
+
+# checking that the length of the dfs adds up
+nrow(nort_98_combined) + nrow(covid_retweets) == nrow(covid)
+# TRUE
+
+covid_retweets_with_label <- covid_retweets |>
+  left_join(nort_98_combined[, c("id", "label")], 
+            by = c("unnest_referenced_tweets_id" = "id")) |>
+  select(-unnest_referenced_tweets_id)
+
+################################################################################
+covid_no_label <- covid_retweets_with_label |>
+  filter(is.na(label)) |>
+  ungroup() |>
+  distinct(unnest_referenced_tweets_id, .keep_all = TRUE)
+
+write.xlsx(covid_no_label, "D:/unlabeled_data.xlsx")
+covid_no_label_label <- read.xlsx("D:/unlabeled_data.xlsx")
+
+covid_no_label <- covid_retweets_with_label |>
+  filter(is.na(label)) |>
+  ungroup() |>
+  select(-label)
+
+covid_no_label <- covid_no_label |>
+  left_join(covid_no_label_label[, c("unnest_referenced_tweets_id", "label")], 
+            by = c("unnest_referenced_tweets_id" = "unnest_referenced_tweets_id"))
+  
+covid_retweets_with_label <- covid_retweets_with_label |>
+  left_join(covid_no_label[, c("id", "label")],
+            by = "id") |>
+  mutate(label = coalesce(label.x, label.y)) |>
+  select(-c(label.x, label.y))
+
+################################################################################
+
+covid_merged <- covid_retweets_with_label |>
+  rbind(nort_98_combined) |>
+  arrange(created_at)
+
+saveRDS(covid_merged, "D:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")

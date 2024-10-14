@@ -1,5 +1,5 @@
 packages <- c("tidyverse", "lubridate", "ggpubr", "ggthemes", "Polychrome", 
-              "car", "lmtest", "changepoint")
+              "car", "lmtest", "changepoint", "ISOweek")
 
 # for (x in packages) {
 #   if (!require(x, character.only = TRUE)) {
@@ -18,220 +18,111 @@ theme_set(
     theme(legend.position = "top")
 )
 
-covid <- readRDS("D:/Data/Datasets/covid_99_class_urls.RDS")
+covid <- readRDS("D:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")
 
-# Formatting the date column
+# Formatting the date columns
 covid$created_at <- ymd_hms(covid$created_at)
 covid$date <- as.Date(covid$created_at)
-
-agg_covid <- covid |>
-  group_by(date, label) |>
-  summarise(tweet_count = n())
-
-agg_covid_wide <- agg_covid |>
-  pivot_wider(names_from = label, values_from = tweet_count)
-
-agg_covid_wide[is.na(agg_covid_wide)] <- 0
-
-mann_whitney_test <- wilcox.test(agg_covid_wide$"non.misinfo", agg_covid_wide$misinfo, 
-                                 exact = FALSE, correct = FALSE)
-print(mann_whitney_test)
-
-n_iterations <- 1000
-set.seed(123)
-results <- replicate(n_iterations, {
-  sample_non_misinfo <- sample(agg_covid$tweet_count[agg_covid$label == "non.misinfo"], 
-                               size = sum(agg_covid$label == "misinfo"), 
-                               replace = TRUE)
-  sample_misinfo <- agg_covid$tweet_count[agg_covid$label == "misinfo"]
-  wilcox.test(sample_non_misinfo, sample_misinfo, exact = FALSE)$p.value
-})
-mean(results < 0.05)
-# 1
-
-
-ks.test <- ks.test(agg_covid_wide$misinfo, agg_covid_wide$"non.misinfo")
-print(ks.test)
-
-
-ggplot(agg_covid, aes(x = date, y = tweet_count, color = label)) +
-  geom_line() +
-  labs(title = "Peaks in Misinformation Dissemination",
-       x = "Month",
-       y = "Number of Instances",
-       color = "Peak:") +
-  scale_x_date(date_labels = "%m-%Y", date_breaks = "2 months", minor_breaks  = "1 month") +
-  theme(axis.text.x = element_text(angle=30, vjust = 0.5, hjust = 0.5))
-
-
-acf(agg_covid_wide$misinfo, main = "Autocorrelation - Misinformation")
-acf(agg_covid_wide$"non.misinfo", main = "Autocorrelation - Non-misinformation")
-
-
-agg_covid_wide$time <- seq_along(agg_covid_wide$date)
-
-# Fit a Poisson regression model
-glm_model <- glm(misinfo ~ time, family = poisson(link = "log"), data = agg_covid_wide)
-summary(glm_model)
-
-
-# Create a contingency table
-orig_table <- table(covid$date, covid$label)
-# Perform the Chi-Square test
-orig_chi <- chisq.test(orig_table)
-orig_stat <- orig_chi$statistic
-# p-value < 2.2e-16
-
 covid$month <- format(as.Date(covid$created_at), format = "%Y-%m")
 covid$month <- ym(covid$month)
+covid$week_num <- strftime(covid$date, format = "%Y-%V")
 
-ks.test(covid$month[covid$label == "misinformation"], 
-        covid$month[covid$label == "non.misinformation"])
-
-
-library(mgcv)
-covid$label_dic <- case_when(
-  covid$label == "non.misinfo" ~ 0,
-  covid$label == "misinfo" ~ 1)
-
-covid$date <- as.POSIXct(covid$date) # if it's a date-time variable
-covid$label_dic <- as.factor(covid$label_dic)
-
-model <- gam(label_dic ~ s(as.numeric(date)), family = binomial, data = covid)
-summary(model)
-plot(model)
-
-new_data <- data.frame(date = seq(from = min(covid$date), to = max(covid$date), by = "days"))
-new_data$predicted <- predict(model, new_data, type = "response")
-
-
-
-# covid$month <- format(as.Date(covid$created_at), format = "%Y-%m")
-# covid$month <- ym(covid$month)
-# 
-# covid$label_dic <- case_when(
-#   covid$label == "non.misinfo" ~ 0,
-#   covid$label == "misinfo" ~ 1)
-# 
-# covid$label <- case_when(
-#   covid$label == "non.misinfo" ~ "non misinformation",
-#   covid$label == "misinfo" ~ "misinformation")
-# 
-# covid_date <- covid |>
-#   ungroup() |>
-#   count(month, label, sort = TRUE)
-# 
-# wide_covid <- covid_date |>
-#   spread(label, n)
+glimpse(covid)
 
 covid |>
   ungroup() |>
   count(label)
-# misinformation = 34 581
-# non-misinformation = 739 362
-# 0.045
+# 21809 misinfo
+# 404453 non misinfo
 
-################################################################################
-# H1: Tweets classified as misinformation will exhibit distinct temporal patterns 
-# compared to non-misinformation tweets during the COVID-19 pandemic.
+# How many are retweets?
+covid_retweets <- covid |>
+  filter(!is.na(unnest_referenced_tweets_id)) # 89709
 
-# Checking the distribution of the residuals
-model <- lm(label_dic~month, data = covid)
-res <- resid(model)
-qqnorm(res)
-qqline(res)
-# The plot shows that the residuals stray from the line quite a bit at the tails -> not normally distributed
+###############################################################################
+# H1: Tweets classified as misinformation exhibit distinct temporal patterns 
+# compared to non-misinformation tweets during the COVID-19 pandemic, 
+# with peaks in activity coinciding with significant events. 
 
-plot(density(res))
-# The density plot confirms that the residuals does not follow a normal distribution
+###
+### TIMELINE
+###
 
-# Checking for heteroscedasticity 
-covid$res <- model$residuals
-ggplot(covid, aes(y=res, x=month)) +
-  geom_point()+
-  geom_abline(slope=0)
-# Clear signs of heteroscedasticity
+covid_week <- covid |>
+  group_by(week_num, label) |>
+  summarise(tweet_count = n())
 
-levene_test <- leveneTest(n ~ label, data = covid_date)
+covid_month <- covid |>
+  group_by(month, label) |>
+  summarise(tweet_count = n())
 
-print(levene_test)
-# F-value: 31.622
-# p-value: 3.57e-07
-# Heteroscedasticity is present: The difference in variances between the misinfo and non-misinfo groups is statistically significant. 
-# The null hypothesis (that the variance is equal) is thus rejected
+# Function to scale the values
+scale_values <- function(x){(x-min(x))/(max(x)-min(x))}
 
-# Using the Mann Whitney u test instead of a standard t-test, since my data does not meet the assumptions of normality and homoscedasticity. 
-mann_whitney_test <- wilcox.test(n ~ label, data = covid_date, exact = FALSE)
-print(mann_whitney_test)
-# p-value is smaller than 0.05, the null hypothesis is rejected. 
-# This indicates that the temporal patterns of misinformation and non-misinformation instances are significantly different from each other.
+covid_mis <- covid_month |>
+  filter(label == "misinfo")
+covid_mis <- as.data.frame(covid_mis)
 
-# Is the different sizes in the two groups affecting the result?
-# Bootstrapping example
-set.seed(123)
-n_iterations <- 1000
-results <- replicate(n_iterations, {
-  sample_non_misinfo <- sample(covid_date$n[covid_date$label == "non misinformation"], 
-                               size = sum(covid_date$label == "misinformation"), 
-                               replace = TRUE)
-  sample_misinfo <- covid_date$n[covid_date$label == "misinformation"]
-  wilcox.test(sample_non_misinfo, sample_misinfo, exact = FALSE)$p.value
-  })
+covid_non_mis <- covid_month |>
+  filter(label == "non.misinfo")
+covid_non_mis <- as.data.frame(covid_non_mis)
 
-# Summary of bootstrap results
-mean(results < 0.05)  # Proportion of significant results
-# Returns 1: The difference between the misinformation and non-misinformation groups 
-# is consistently significant across all the resampled datasets. I.e. the observed 
-# difference in temporal patterns is robust and not just a result of the imbalance in group sizes.
+covid_mis$n_scaled <- scale_values(covid_mis$tweet_count)
+covid_non_mis$n_scaled <- scale_values(covid_non_mis$tweet_count)
 
-ggplot(covid_date, aes(x = label, y = log(n+1), fill = label)) +
+# covid_non_mis$week_start <- ISOweek2date(paste0(gsub("-", "-W", covid_non_mis$week_num), "-1"))
+# covid_mis$week_start <- ISOweek2date(paste0(gsub("-", "-W", covid_mis$week_num), "-1"))
+
+legend <- c("non-misinformation observations" = "#00bfc4", "misinformation observations" = "#F8766D")
+
+covid_non_mis |>
+  ggplot(aes(x = month, y = n_scaled, fill = "label", group = 1)) +
+  geom_line(linewidth = 1.1, aes(color = "non-misinformation observations")) +
+  geom_line(data = covid_mis, aes(y = n_scaled, color = "misinformation observations"), linewidth = 1.1) +
+  scale_y_continuous(limits = c(0,1)) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "2 months") +
+  theme(axis.text.x = element_text(angle=30, vjust = 0.5, hjust = 0.5)) +
+  labs(title = "Timeline of Monthly Tweet Counts", 
+       subtitle = "Counts scaled using min-max normalization",
+       y = "", x = "", color = "") +
+  scale_color_manual(values = legend)
+
+###
+### BOXPLOT, by monthly tweet count
+###
+
+covid_month_norm <- covid_month |>
+  group_by(label) |>
+  mutate(value_norm = scale_values(tweet_count))
+
+covid_month_norm$label <- case_when(
+  covid_month_norm$label == "non.misinfo" ~ "non-misinformation",
+  covid_month_norm$label == "misinfo" ~ "misinformation")
+  
+ggplot(covid_month_norm, aes(x = label, y = log(tweet_count + 1), fill = label)) +
   geom_boxplot() +
-  labs(title = "Comparison of Monthly Tweet Counts (Log-Transformed)",
+  labs(title = "Boxplots of Monthly Tweet Counts",
+       subtitle = "Log-transformed",
        x = "",
-       y = "Tweet counts per month") +
-  theme(axis.text=element_text(size=12))
+       y = "")  +
+  theme(axis.text=element_text(size=12), 
+        legend.position = "none")
 
-# Create a contingency table
-contingency_table <- table(covid$month, covid$label)
-# Perform the Chi-Square test
-chisq.test(contingency_table)
-# p-value < 2.2e-16
-
-# ################################################################################
-# install.packages("forecast")
-# library(forecast)
-# 
-# # Decomposing the time series
-# ts_data <- ts(misinfo_data$n, frequency = 12)
-# decomp <- stl(ts_data, s.window = "periodic")
-# 
-# # Plotting the decomposition
-# plot(decomp)
-
-################################################################################
-library(pracma)
-
-misinfo_data <- covid_date |>
-  filter(label == "misinformation") |>
-  arrange(month)
-
-misinfo_data$n_smooth <- movavg(misinfo_data$n, n = 2, type = "s")
-
-peaks <- findpeaks(misinfo_data$n_smooth, threshold = 0.01 * max(misinfo_data$n_smooth))
-
-# Adding peak information to the data
-misinfo_data$peak <- ifelse(misinfo_data$n_smooth %in% peaks[, 1], "Peak", "Non-Peak")
-
-# Plotting the data with peaks highlighted
-ggplot(misinfo_data, aes(x = month, y = n_smooth)) +
-  geom_line() +
-  geom_point(aes(color = peak), size = 3) +
-  labs(title = "Peaks in Misinformation Dissemination",
-       x = "Month",
-       y = "Number of Instances",
-       color = "Peak:") +
-  scale_x_date(date_labels = "%m-%Y", date_breaks = "2 months", minor_breaks  = "1 month") +
-  theme(axis.text.x = element_text(angle=30, vjust = 0.5, hjust = 0.5))
+covid_month_norm |>
+  ggplot(aes(x = label, y = value_norm)) + 
+  geom_boxplot(aes(fill = label)) + 
+  labs(
+    title = "Tweets per month",
+    y = "Min-max normalized scale",
+    x = "",
+  ) +
+  facet_wrap(~label, scales = "free") + 
+  theme(
+    strip.text = element_text(size = 12),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "none"
+  )
 
 ################################################################################
 # H2: The engagement metrics (likes, retweets, replies) 
@@ -240,41 +131,95 @@ ggplot(misinfo_data, aes(x = month, y = n_smooth)) +
 # retweet_count # Number of retweets
 # reply_count # number of replies
 # like_count # number of likes 
-# quote_count # number of quotes
-# impression_count # number of times a tweet has been seen, implemented in mid-december 2022, not relevant for this data
 
-covid_retweet <- covid |>
-  count(retweet_count, label)
-
-covid_reply <- covid |>
-  count(reply_count, label)
-
-covid_like <- covid |>
-  count(like_count, label)
-
-covid_quote <- covid |>
-  count(quote_count, label)
-
-retweet_test <- wilcox.test(n ~ label, data = covid_retweet)
-print(retweet_test) # p = 2.565e-06
-
-reply_test <- wilcox.test(n ~ label, data = covid_reply)
-print(reply_test) # p = 1
-
-like_test <- wilcox.test(n ~ label, data = covid_like)
-print(like_test) # p = 0.9171
-
-quote_test <- wilcox.test(n ~ label, data = covid_quote)
-print(quote_test) # p = 0.7967
+covid |>
+  group_by(label) |>
+  summarise(
+    retweet_mean = mean(retweet_count, na.rm = TRUE),
+    retweet_median = median(retweet_count, na.rm = TRUE),
+    retweet_sd = sd(retweet_count, na.rm = TRUE),
+    like_mean = mean(like_count, na.rm = TRUE),
+    like_median = median(like_count, na.rm = TRUE),
+    like_sd = sd(like_count, na.rm = TRUE),
+    reply_mean = mean(reply_count, na.rm = TRUE),
+    reply_median = median(reply_count, na.rm = TRUE),
+    reply_sd = sd(reply_count, na.rm = TRUE)
+  )
 
 
-library(mvabund)
-# Multivariate Generalized Linear Models (GLMs) 
-# Convert the engagement variables to a matrix for mvabund
-engagement_data <- mvabund(covid[, c("retweet_count", "like_count", "reply_count", "quote_count")])
-covid_small <- covid |>
-  select(c(retweet_count, like_count, reply_count, quote_count, label, month))
+# Fit Poisson regression model for retweets
+retweet_model <- glm(retweet_count ~ label, family = poisson, data = covid)
+summary(retweet_model)
 
-# Fit the model
-model_mvabund <- manyglm(engagement_data ~ label, family = "poisson", data = covid_small)
-summary(model_mvabund)
+# Check for overdispersion: compare residual deviance with degrees of freedom
+retweet_dispersion <- with(retweet_model, sum(residuals^2) / df.residual)
+retweet_dispersion  # 21.79, indicates overdispersion
+
+like_model <- glm(like_count ~ label, family = poisson, data = covid)
+summary(like_model)
+like_dispersion <- with(like_model, sum(residuals^2) / df.residual)
+like_dispersion  # 59, indicates overdispersion
+
+reply_model <- glm(reply_count ~ label, family = poisson, data = covid)
+summary(reply_model)
+reply_dispersion <- with(reply_model, sum(residuals^2) / df.residual)
+reply_dispersion # 13.48
+
+# There's overdispersion in all of the models, so switchin to negative binomial regression
+nb_retweet_model <- glm.nb(retweet_count ~ label, data = covid)
+nb_like_model <- glm.nb(like_count ~ label, data = covid)
+nb_reply_model <- glm.nb(reply_count ~ label, data = covid)
+summary(nb_retweet_model)
+summary(nb_like_model)
+summary(nb_reply_model)
+
+exp(coef(nb_retweet_model)[2]) 
+exp(confint.default(nb_retweet_model))
+
+exp(coef(nb_like_model)[2]) 
+exp(confint.default(nb_like_model))
+
+exp(coef(nb_reply_model)[2]) 
+exp(confint.default(nb_reply_model))
+
+
+################################################################################
+# H3: The majority of identified COVID-19 misinformation originates from a small minority of users. 
+
+misinfo_by_user <- covid |>
+  filter(label == "misinfo") |>
+  group_by(author_hash) |>
+  summarise(misinfo_count = n()) |>
+  arrange(desc(misinfo_count))
+
+total_misinfo <- sum(misinfo_by_user$misinfo_count)
+misinfo_by_user <- misinfo_by_user |>
+  mutate(misinfo_proportion = misinfo_count / total_misinfo)
+
+misinfo_by_user |>
+  summarise(max = max(misinfo_count), min = min(misinfo_count), 
+            mean = mean(misinfo_count), median = median(misinfo_count), 
+            sd = sd(misinfo_count))
+
+
+
+# Lorenz curve
+library(ineq)
+plot(Lc(misinfo_by_user$misinfo_count), col = "#F8766D", main = "Lorenz Curve for Misinformation Tweets")
+
+misinfo_by_user <- misinfo_by_user |>
+  arrange(desc(misinfo_count)) |>
+  mutate(cum_tweets = cumsum(misinfo_count) / sum(misinfo_count),
+         cum_users = (row_number()) / n())
+
+# Gini coefficient
+gini_coef <- Gini(misinfo_by_user$misinfo_count)
+print(gini_coef)
+
+ggplot(misinfo_by_user, aes(x = cum_users, y = cum_tweets)) +
+  geom_line(size = 1.2, color = "#F8766D") +       # Lorenz curve
+  geom_abline(intercept = 0, size = 1, slope = 1, linetype = "dashed") +  # Line of equality
+  labs(title = paste("Lorenz Curve of Misinformation Tweets by User (Gini:", round(gini_coef, 2), ")"),
+       x = "Cumulative Proportion of Users",
+       y = "Cumulative Proportion of Misinformation Tweets") +
+  theme_minimal()
