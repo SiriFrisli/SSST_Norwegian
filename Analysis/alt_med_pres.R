@@ -5,7 +5,7 @@ library(urltools)
 library(readxl)
 
 # Loading and combining my data. One with classification labels, and one with domain names. 
-covid <- readRDS("D:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")
+covid <- readRDS("E:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")
 
 covid$month <- format(as.Date(covid$created_at), format = "%Y-%m")
 covid$month <- ym(covid$month)
@@ -59,7 +59,7 @@ misinfo_sites_bar
 
 am <- read_xlsx("~/SSST_Norwegian/anms.xlsx")
 am <- am |>
-  select(c("dom_url" = "url", "country"))
+  select(c("dom_url" = "domain", "language"))
 
 covid_sites <- covid |>
   mutate(alt_news_link = ifelse(dom_url %in% am$dom_url, "yes", "no"))
@@ -106,12 +106,14 @@ covid_mis_sites <- covid_mis_sites[-1,]
 
 covid_mis_sites$n_scaled <- scale_values(covid_mis_sites$n)
 
-ggplot(covid_mis_sites[1:10, ], aes(x = reorder(dom_url, n_scaled), y = n_scaled, fill = alt_news_link)) +
+alt_news_plot <- ggplot(covid_mis_sites[1:10, ], aes(x = reorder(dom_url, n), y = n, fill = alt_news_link)) +
   geom_bar(stat = "identity") +
   coord_flip() +
-  scale_fill_manual(values=c( "#00BFC4", "#F8766D")) +
+  scale_fill_manual(values=c( "#dfc27d", "#a6611a")) +
   labs(title = "Most Popular Domains in Misinformation Tweets",
        x = "Domain",
-       y = "Percent",
+       y = "Count",
        fill = "Alternative News Site") +
   theme_minimal()
+
+ggsave(filename = "FIGURE_4.png", plot = alt_news_plot, bg = "white", device = "png", units = "px", dpi="print")

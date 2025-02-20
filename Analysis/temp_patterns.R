@@ -18,7 +18,7 @@ theme_set(
     theme(legend.position = "top")
 )
 
-covid <- readRDS("D:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")
+covid <- readRDS("E:/Data/Datasets/Classification_data_filtered/covid_classified_without_rt_98_FINAL.RDS")
 
 # Formatting the date columns
 covid$created_at <- ymd_hms(covid$created_at)
@@ -73,9 +73,9 @@ covid_non_mis$n_scaled <- scale_values(covid_non_mis$tweet_count)
 # covid_non_mis$week_start <- ISOweek2date(paste0(gsub("-", "-W", covid_non_mis$week_num), "-1"))
 # covid_mis$week_start <- ISOweek2date(paste0(gsub("-", "-W", covid_mis$week_num), "-1"))
 
-legend <- c("non-misinformation observations" = "#00bfc4", "misinformation observations" = "#F8766D")
+legend <- c("non-misinformation observations" = "#dfc27d", "misinformation observations" = "#a6611a")
 
-covid_non_mis |>
+covid_non_mis_plot <- covid_non_mis |>
   ggplot(aes(x = month, y = n_scaled, fill = "label", group = 1)) +
   geom_line(linewidth = 1.1, aes(color = "non-misinformation observations")) +
   geom_line(data = covid_mis, aes(y = n_scaled, color = "misinformation observations"), linewidth = 1.1) +
@@ -86,6 +86,8 @@ covid_non_mis |>
        subtitle = "Counts scaled using min-max normalization",
        y = "", x = "", color = "") +
   scale_color_manual(values = legend)
+
+ggsave(filename = "FIGURE_1.png", plot = covid_non_mis_plot, device = "png", units = "px", dpi="print")
 
 ###
 ### BOXPLOT, by monthly tweet count
@@ -108,9 +110,10 @@ ggplot(covid_month_norm, aes(x = label, y = log(tweet_count + 1), fill = label))
   theme(axis.text=element_text(size=12), 
         legend.position = "none")
 
-covid_month_norm |>
+covid_month_norm_plot <- covid_month_norm |>
   ggplot(aes(x = label, y = value_norm)) + 
   geom_boxplot(aes(fill = label)) + 
+  scale_fill_manual(values = c("#a6611a", "#dfc27d")) +
   labs(
     title = "Tweets per month",
     y = "Min-max normalized scale",
@@ -123,6 +126,7 @@ covid_month_norm |>
     axis.ticks.x = element_blank(),
     legend.position = "none"
   )
+ggsave(filename = "FIGURE_2.png", plot = covid_month_norm_plot, device = "png", units = "px", dpi="print")
 
 ################################################################################
 # H2: The engagement metrics (likes, retweets, replies) 
@@ -201,8 +205,6 @@ misinfo_by_user |>
             mean = mean(misinfo_count), median = median(misinfo_count), 
             sd = sd(misinfo_count))
 
-
-
 # Lorenz curve
 library(ineq)
 plot(Lc(misinfo_by_user$misinfo_count), col = "#F8766D", main = "Lorenz Curve for Misinformation Tweets")
@@ -216,10 +218,12 @@ misinfo_by_user <- misinfo_by_user |>
 gini_coef <- Gini(misinfo_by_user$misinfo_count)
 print(gini_coef)
 
-ggplot(misinfo_by_user, aes(x = cum_users, y = cum_tweets)) +
+lor_curve <- ggplot(misinfo_by_user, aes(x = cum_users, y = cum_tweets)) +
   geom_line(size = 1.2, color = "#F8766D") +       # Lorenz curve
   geom_abline(intercept = 0, size = 1, slope = 1, linetype = "dashed") +  # Line of equality
   labs(title = paste("Lorenz Curve of Misinformation Tweets by User (Gini:", round(gini_coef, 2), ")"),
        x = "Cumulative Proportion of Users",
        y = "Cumulative Proportion of Misinformation Tweets") +
   theme_minimal()
+
+ggsave(filename = "FIGURE_3.png", plot = lor_curve, device = "png", units = "px", dpi="print")
